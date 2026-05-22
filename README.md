@@ -7,7 +7,7 @@ Clone the repo, download each release into folders (release_01 or release_02) de
 Release 1: https://d34w7g4gy10iej.cloudfront.net/uapvideos.zip  
 Release 2: https://d34w7g4gy10iej.cloudfront.net/uap052226.zip  
 
-![Local UAP Video Index screenshot](img/Xnapper-2026-05-22-16.08.57)
+![Local UAP Video Index screenshot](img/Xnapper-2026-05-22-16.08.57.png)
 
 ## Folder Structure
 
