@@ -63,7 +63,7 @@
         <div class="filter-label">Decade</div>
         <div id="decades" class="filter-pills" aria-label="View by decade"></div>
       </div>
-      <div class="summary"><span id="shown">85</span> of 85 local MP4s shown. Generated 2026-05-22 13:20. Metadata comes from cached DVIDS search pages when available; official War.gov hash links are reconstructed from DVIDS titles.</div>
+      <div class="summary"><span id="shown">85</span> of 85 local MP4s shown. Generated 2026-05-22 14:21. Metadata comes from cached DVIDS search pages when available; official War.gov hash links are reconstructed from DVIDS titles.</div>
     </div>
   </header>
   <main><div id="grid" class="grid"></div></main>
@@ -86,29 +86,33 @@
       return `${Math.floor(Number(match[1]) / 10) * 10}s`;
     }
     function renderDecades() {
-      const counts = records.reduce((acc, r) => {
+      const source = records.filter(r => !activeRelease || r.release === activeRelease);
+      const counts = source.reduce((acc, r) => {
         const decade = decadeOf(r);
         acc[decade] = (acc[decade] || 0) + 1;
         return acc;
       }, {});
+      if (activeDecade && !counts[activeDecade]) activeDecade = '';
       const labels = Object.keys(counts).sort((a, b) => {
         if (a === 'Unknown') return 1;
         if (b === 'Unknown') return -1;
         return Number(b.slice(0, 4)) - Number(a.slice(0, 4));
       });
-      decades.innerHTML = [`<button class="filter-pill ${activeDecade ? '' : 'active'}" type="button" data-decade="">All (${records.length})</button>`]
+      decades.innerHTML = [`<button class="filter-pill ${activeDecade ? '' : 'active'}" type="button" data-decade="">All (${source.length})</button>`]
         .concat(labels.map(label => `<button class="filter-pill ${activeDecade === label ? 'active' : ''}" type="button" data-decade="${esc(label)}">${esc(label.replace('s', ''))} (${counts[label]})</button>`))
         .join('');
     }
     function renderReleases() {
-      const counts = records.reduce((acc, r) => {
+      const source = records.filter(r => !activeDecade || decadeOf(r) === activeDecade);
+      const counts = source.reduce((acc, r) => {
         const key = r.release || 'unfiled';
         if (!acc[key]) acc[key] = { label: r.release_label || 'Unfiled', count: 0 };
         acc[key].count += 1;
         return acc;
       }, {});
+      if (activeRelease && !counts[activeRelease]) activeRelease = '';
       const keys = Object.keys(counts).sort((a, b) => counts[a].label.localeCompare(counts[b].label));
-      releases.innerHTML = [`<button class="filter-pill ${activeRelease ? '' : 'active'}" type="button" data-release="">All (${records.length})</button>`]
+      releases.innerHTML = [`<button class="filter-pill ${activeRelease ? '' : 'active'}" type="button" data-release="">All (${source.length})</button>`]
         .concat(keys.map(key => `<button class="filter-pill ${activeRelease === key ? 'active' : ''}" type="button" data-release="${esc(key)}">${esc(counts[key].label)} (${counts[key].count})</button>`))
         .join('');
     }
@@ -165,8 +169,8 @@
       });
       shown.textContent = list.length;
       grid.innerHTML = list.map(card).join('');
-      renderReleases();
       renderDecades();
+      renderReleases();
       if (shouldScroll) scrollToResults();
     }
     q.addEventListener('input', () => render(true));
