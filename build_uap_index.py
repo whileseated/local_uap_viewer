@@ -18,6 +18,11 @@ REPETITIVE_DESCRIPTION_PREFIX = (
     "Community. The All-domain Anomaly Resolution Office (AARO) identified a collection of responsive "
     "materials held on a classified network. Many of these materials lack a substantiated chain-of-custody."
 )
+REPETITIVE_DESCRIPTION_DISCLAIMER = (
+    "This video description is provided for informational purposes only. Readers should not interpret any "
+    "part of this description as reflecting an analytical judgment, investigative conclusion, or factual "
+    "determination regarding the described event's validity, nature, or significance."
+)
 
 
 def text_between(pattern, value, default=""):
@@ -40,6 +45,11 @@ def trim_description(value):
     value = clean_text(value)
     if value.startswith(REPETITIVE_DESCRIPTION_PREFIX):
         value = value[len(REPETITIVE_DESCRIPTION_PREFIX):].lstrip()
+    value = value.replace("event’s", "event's")
+    value = value.replace(REPETITIVE_DESCRIPTION_DISCLAIMER, "")
+    value = re.sub(r"\n{3,}", "\n\n", value)
+    value = re.sub(r"\s*\n?\s*(Video Duration:)", r"\n\n\1", value)
+    value = re.sub(r"\n{3,}", "\n\n", value)
     return value
 
 
@@ -213,7 +223,7 @@ def render(items):
     header {{ position:sticky; top:0; z-index:2; background:rgba(17,19,20,.94); border-bottom:1px solid var(--line); backdrop-filter: blur(10px); }}
     .wrap {{ max-width:1440px; margin:0 auto; padding:18px; }}
     h1 {{ margin:0 0 12px; font-size:24px; letter-spacing:0; }}
-    .controls {{ display:grid; grid-template-columns:minmax(220px,1fr) auto auto auto; gap:10px; align-items:center; }}
+    .controls {{ display:grid; grid-template-columns:minmax(220px,1fr) auto auto auto auto; gap:10px; align-items:center; }}
     input, select, button {{ min-height:38px; border:1px solid var(--line); border-radius:6px; background:#0d0f10; color:var(--text); padding:0 10px; font:inherit; }}
     button {{ cursor:pointer; }}
     .filter-row {{ display:grid; grid-template-columns:auto 1fr; gap:10px; align-items:start; margin-top:12px; }}
@@ -221,16 +231,23 @@ def render(items):
     .filter-pills {{ display:flex; flex-wrap:wrap; gap:8px; }}
     .filter-pill {{ min-height:30px; border-radius:999px; padding:0 10px; color:var(--muted); }}
     .filter-pill.active {{ border-color:var(--accent); color:var(--text); background:#14302c; }}
+    .marker-button {{ min-height:0; width:1.45em; height:1.25em; border:0; border-radius:999px; background:transparent; color:var(--muted); padding:0; font:inherit; font-size:1.08em; line-height:1.2; opacity:.76; }}
+    .marker-button:hover, .marker-button.active {{ color:var(--accent); opacity:1; }}
     .summary {{ color:var(--muted); font-size:13px; margin-top:10px; }}
     main {{ max-width:1440px; margin:0 auto; padding:18px; }}
     .grid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(430px,1fr)); gap:14px; }}
     article {{ border:1px solid var(--line); border-radius:8px; background:var(--panel); overflow:hidden; }}
     video {{ display:block; width:100%; aspect-ratio:16/9; background:#050606; }}
     .body {{ padding:14px; }}
-    .kicker {{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; color:var(--muted); font:12px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; }}
+    .kicker {{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:8px; color:var(--muted); font:12px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; cursor:pointer; }}
+    .kicker:hover, h2.metadata-trigger:hover {{ color:var(--text); }}
     h2 {{ margin:0; font-size:17px; line-height:1.3; letter-spacing:0; }}
+    h2.metadata-trigger {{ cursor:pointer; }}
     p {{ margin:10px 0 0; color:var(--muted); }}
     .description {{ white-space:pre-line; }}
+    .metadata {{ display:none; }}
+    .show-all-metadata .metadata, article.show-row-metadata .metadata, .searching .metadata {{ display:block; }}
+    mark {{ background:#fff2a8; color:#161616; border-radius:2px; padding:0 .08em; }}
     .links {{ display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }}
     a {{ color:var(--accent); text-decoration:none; }}
     a:hover {{ text-decoration:underline; }}
@@ -250,10 +267,18 @@ def render(items):
         <input id="q" type="search" placeholder="Search title, DOD id, PR number, description...">
         <select id="sort">
           <option value="title">Sort by title</option>
+          <option value="date_taken_desc">Sort by date taken</option>
           <option value="size_desc">Largest files first</option>
           <option value="size_asc">Smallest files first</option>
           <option value="dod">Sort by DOD id</option>
         </select>
+        <select id="markerFilter" aria-label="Marker filter">
+          <option value="">All markers</option>
+          <option value="faves">Faves</option>
+          <option value="dislikes">Dislikes</option>
+          <option value="unfaved">Unfaved</option>
+        </select>
+        <button id="metadataToggle" type="button" aria-pressed="false">Show metadata</button>
         <button id="collapse">Pause all</button>
         <button id="clear">Clear</button>
       </div>
@@ -279,77 +304,164 @@ def render(items):
     const releases = document.getElementById('releases');
     const decades = document.getElementById('decades');
     const resultsTop = document.querySelector('main');
+    const markerFilter = document.getElementById('markerFilter');
+    const metadataToggle = document.getElementById('metadataToggle');
+    const FAVORITES_KEY = 'uapVideoFavorites';
+    const DISLIKED_KEY = 'uapVideoDisliked';
     let activeRelease = '';
     let activeDecade = '';
+    let showAllMetadata = false;
+    let activeMarkerFilter = '';
+    let favorites = new Set(JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]'));
+    let disliked = new Set(JSON.parse(localStorage.getItem(DISLIKED_KEY) || '[]'));
+    let activeVideo = null;
     const esc = value => String(value || '').replace(/[&<>"']/g, c => ({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[c]));
+    function escapeRegExp(value) {{
+      return String(value).replace(/[.*+?^${{}}()|[\\]\\\\]/g, '\\\\$&');
+    }}
+    function marked(value, term) {{
+      const safe = esc(value);
+      if (!term) return safe;
+      return safe.replace(new RegExp(escapeRegExp(esc(term)), 'gi'), match => `<mark>${{match}}</mark>`);
+    }}
+    function saveFavorites() {{
+      localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites].sort()));
+    }}
+    function saveDisliked() {{
+      localStorage.setItem(DISLIKED_KEY, JSON.stringify([...disliked].sort()));
+    }}
+    function updateMarkerFilter() {{
+      markerFilter.options[0].textContent = `All markers (${{records.length}})`;
+      markerFilter.options[1].textContent = `Faves (${{favorites.size}})`;
+      markerFilter.options[2].textContent = `Dislikes (${{disliked.size}})`;
+      markerFilter.options[3].textContent = `Unfaved (${{records.length - favorites.size - disliked.size}})`;
+      markerFilter.value = activeMarkerFilter;
+    }}
+    function cycleMarker(dodId) {{
+      if (!favorites.has(dodId) && !disliked.has(dodId)) {{
+        favorites.add(dodId);
+        disliked.delete(dodId);
+      }} else if (favorites.has(dodId)) {{
+        favorites.delete(dodId);
+        disliked.add(dodId);
+      }} else {{
+        disliked.delete(dodId);
+      }}
+      saveFavorites();
+      saveDisliked();
+      if ((activeMarkerFilter === 'faves' && favorites.size === 0) || (activeMarkerFilter === 'dislikes' && disliked.size === 0)) {{
+        activeMarkerFilter = '';
+      }}
+      if (activeMarkerFilter) {{
+        render(false);
+      }} else {{
+        updateMarkerFilter();
+        updateMarkerButtons(dodId);
+      }}
+    }}
+    function markerIcon(dodId) {{
+      if (favorites.has(dodId)) return '👍';
+      if (disliked.has(dodId)) return '👎';
+      return '☞';
+    }}
+    function markerLabel(dodId) {{
+      if (favorites.has(dodId)) return 'Marked favorite. Click to mark thumbs down.';
+      if (disliked.has(dodId)) return 'Marked thumbs down. Click to clear marker.';
+      return 'No marker. Click to mark favorite.';
+    }}
+    function updateMarkerButtons(dodId) {{
+      document.querySelectorAll(`[data-marker="${{CSS.escape(dodId)}}"]`).forEach(button => {{
+        const active = favorites.has(dodId) || disliked.has(dodId);
+        const label = markerLabel(dodId);
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-label', label);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        button.setAttribute('title', label);
+        button.textContent = markerIcon(dodId);
+      }});
+    }}
     function decadeOf(r) {{
       const match = String(r.date_taken || '').match(/(\\d{{4}})$/);
       if (!match) return 'Unknown';
       return `${{Math.floor(Number(match[1]) / 10) * 10}}s`;
     }}
     function renderDecades() {{
-      const counts = records.reduce((acc, r) => {{
+      const source = records.filter(r => !activeRelease || r.release === activeRelease);
+      const counts = source.reduce((acc, r) => {{
         const decade = decadeOf(r);
         acc[decade] = (acc[decade] || 0) + 1;
         return acc;
       }}, {{}});
+      if (activeDecade && !counts[activeDecade]) activeDecade = '';
       const labels = Object.keys(counts).sort((a, b) => {{
         if (a === 'Unknown') return 1;
         if (b === 'Unknown') return -1;
         return Number(b.slice(0, 4)) - Number(a.slice(0, 4));
       }});
-      decades.innerHTML = [`<button class="filter-pill ${{activeDecade ? '' : 'active'}}" type="button" data-decade="">All (${{records.length}})</button>`]
+      decades.innerHTML = [`<button class="filter-pill ${{activeDecade ? '' : 'active'}}" type="button" data-decade="">All (${{source.length}})</button>`]
         .concat(labels.map(label => `<button class="filter-pill ${{activeDecade === label ? 'active' : ''}}" type="button" data-decade="${{esc(label)}}">${{esc(label.replace('s', ''))}} (${{counts[label]}})</button>`))
         .join('');
     }}
     function renderReleases() {{
-      const counts = records.reduce((acc, r) => {{
+      const source = records.filter(r => !activeDecade || decadeOf(r) === activeDecade);
+      const counts = source.reduce((acc, r) => {{
         const key = r.release || 'unfiled';
         if (!acc[key]) acc[key] = {{ label: r.release_label || 'Unfiled', count: 0 }};
         acc[key].count += 1;
         return acc;
       }}, {{}});
+      if (activeRelease && !counts[activeRelease]) activeRelease = '';
       const keys = Object.keys(counts).sort((a, b) => counts[a].label.localeCompare(counts[b].label));
-      releases.innerHTML = [`<button class="filter-pill ${{activeRelease ? '' : 'active'}}" type="button" data-release="">All (${{records.length}})</button>`]
+      releases.innerHTML = [`<button class="filter-pill ${{activeRelease ? '' : 'active'}}" type="button" data-release="">All (${{source.length}})</button>`]
         .concat(keys.map(key => `<button class="filter-pill ${{activeRelease === key ? 'active' : ''}}" type="button" data-release="${{esc(key)}}">${{esc(counts[key].label)}} (${{counts[key].count}})</button>`))
         .join('');
     }}
-    function card(r) {{
+    function card(r, term) {{
       const hay = [r.title, r.dod_id, r.pr, r.description, r.filename].join(' ');
+      const poster = r.poster || '';
       const links = [
         r.dvids_url && `<a class="pill" href="${{esc(r.dvids_url)}}" target="_blank" rel="noreferrer">DVIDS</a>`,
         r.war_url && `<a class="pill" href="${{esc(r.war_url)}}" target="_blank" rel="noreferrer">War.gov record</a>`,
         r.source_mp4_url && `<a class="pill" href="${{esc(r.source_mp4_url)}}" target="_blank" rel="noreferrer">Source MP4</a>`
       ].filter(Boolean).join('');
       const facts = [
-        r.date_taken && `Taken ${{esc(r.date_taken)}}`,
-        r.date_posted && `Posted ${{esc(r.date_posted)}}`,
-        r.location && `Location ${{esc(r.location)}}`,
-        r.duration && `Length ${{esc(r.duration)}}`,
-        r.virin && `VIRIN ${{esc(r.virin)}}`
-      ].filter(Boolean).map(v => `<span class="pill">${{v}}</span>`).join('');
+        r.date_taken && `Taken ${{r.date_taken}}`,
+        r.date_posted && `Posted ${{r.date_posted}}`,
+        r.location && `Location ${{r.location}}`,
+        r.duration && `Length ${{r.duration}}`,
+        r.virin && `VIRIN ${{r.virin}}`
+      ].filter(Boolean).map(v => `<span class="pill">${{marked(v, term)}}</span>`).join('');
       return `<article data-hay="${{esc(hay.toLowerCase())}}">
-        <video controls preload="metadata" playsinline poster="${{esc(r.poster || '')}}">
+        <video controls preload="metadata" playsinline poster="${{esc(poster)}}" data-dod-id="${{esc(r.dod_id)}}">
           <source src="${{esc(r.path)}}" type="video/mp4">
         </video>
         <div class="body">
-          <div class="kicker">
-            <span>${{esc(r.pr || 'No PR')}}</span>
-            <span>${{esc(r.release_label || 'Unfiled')}}</span>
-            <span>${{esc(r.dod_id)}}</span>
-            <span>${{esc(r.size_label)}}</span>
+          <div class="kicker" title="Show metadata for this row">
+            <span>${{marked(r.pr || 'No PR', term)}}</span>
+            <span>${{marked(r.release_label || 'Unfiled', term)}}</span>
+            <span>${{marked(r.dod_id, term)}}</span>
+            <span>${{marked(r.size_label, term)}}</span>
             ${{r.dvids_id ? `<span>DVIDS ${{esc(r.dvids_id)}}</span>` : '<span class="missing">metadata not cached</span>'}}
+            <button class="marker-button ${{favorites.has(r.dod_id) || disliked.has(r.dod_id) ? 'active' : ''}}" type="button" data-marker="${{esc(r.dod_id)}}" aria-label="${{esc(markerLabel(r.dod_id))}}" aria-pressed="${{favorites.has(r.dod_id) || disliked.has(r.dod_id) ? 'true' : 'false'}}" title="${{esc(markerLabel(r.dod_id))}}">${{markerIcon(r.dod_id)}}</button>
           </div>
-          <h2>${{esc(r.title)}}</h2>
-          ${{facts ? `<div class="links">${{facts}}</div>` : ''}}
-          ${{r.description ? `<p class="description">${{esc(r.description)}}</p>` : ''}}
-          <div class="links"><a class="pill" href="${{esc(r.path)}}">Open local MP4</a>${{links}}</div>
+          <h2 class="metadata-trigger" title="Show metadata for this row">${{marked(r.title, term)}}</h2>
+          <div class="metadata">
+            ${{facts ? `<div class="links">${{facts}}</div>` : ''}}
+            ${{r.description ? `<p class="description">${{marked(r.description, term)}}</p>` : ''}}
+            <div class="links"><a class="pill" href="${{esc(r.path)}}">Open local MP4</a>${{links}}</div>
+          </div>
         </div>
       </article>`;
     }}
     function scrollToResults() {{
-      const target = resultsTop.getBoundingClientRect().top + window.scrollY - 12;
+      const header = document.querySelector('header');
+      const target = Math.max(0, resultsTop.getBoundingClientRect().top + window.scrollY - header.offsetHeight - 18);
       window.scrollTo({{ top: Math.max(0, target), behavior: 'smooth' }});
+    }}
+    function dateTakenValue(r) {{
+      const parts = String(r.date_taken || '').match(/^(\\d{{2}})\\.(\\d{{2}})\\.(\\d{{4}})$/);
+      if (!parts) return 0;
+      return Number(`${{parts[3]}}${{parts[1]}}${{parts[2]}}`);
     }}
     function render(shouldScroll = false) {{
       const term = q.value.trim().toLowerCase();
@@ -357,22 +469,81 @@ def render(items):
         const matchesTerm = !term || [r.title, r.dod_id, r.pr, r.description, r.filename].join(' ').toLowerCase().includes(term);
         const matchesRelease = !activeRelease || r.release === activeRelease;
         const matchesDecade = !activeDecade || decadeOf(r) === activeDecade;
-        return matchesTerm && matchesRelease && matchesDecade;
+        const matchesMarker =
+          !activeMarkerFilter ||
+          (activeMarkerFilter === 'faves' && favorites.has(r.dod_id)) ||
+          (activeMarkerFilter === 'dislikes' && disliked.has(r.dod_id)) ||
+          (activeMarkerFilter === 'unfaved' && !favorites.has(r.dod_id) && !disliked.has(r.dod_id));
+        return matchesTerm && matchesRelease && matchesDecade && matchesMarker;
       }});
       list.sort((a,b) => {{
         if (sort.value === 'size_desc') return b.size - a.size;
         if (sort.value === 'size_asc') return a.size - b.size;
         if (sort.value === 'dod') return a.dod_id.localeCompare(b.dod_id);
+        if (sort.value === 'date_taken_desc') return dateTakenValue(b) - dateTakenValue(a) || a.title.localeCompare(b.title);
         return a.title.localeCompare(b.title);
       }});
       shown.textContent = list.length;
-      grid.innerHTML = list.map(card).join('');
-      renderReleases();
+      document.body.classList.toggle('searching', Boolean(term));
+      document.body.classList.toggle('show-all-metadata', showAllMetadata);
+      metadataToggle.textContent = showAllMetadata ? 'Hide metadata' : 'Show metadata';
+      metadataToggle.setAttribute('aria-pressed', showAllMetadata ? 'true' : 'false');
+      updateMarkerFilter();
+      grid.innerHTML = list.map(r => card(r, term)).join('');
       renderDecades();
+      renderReleases();
       if (shouldScroll) scrollToResults();
     }}
     q.addEventListener('input', () => render(true));
     sort.addEventListener('change', () => render(true));
+    metadataToggle.addEventListener('click', () => {{
+      showAllMetadata = !showAllMetadata;
+      render(false);
+    }});
+    markerFilter.addEventListener('change', () => {{
+      activeMarkerFilter = markerFilter.value;
+      render(true);
+    }});
+    grid.addEventListener('click', event => {{
+      const markerButton = event.target.closest('[data-marker]');
+      if (markerButton) {{
+        event.stopPropagation();
+        cycleMarker(markerButton.dataset.marker);
+        return;
+      }}
+      const trigger = event.target.closest('.kicker, .metadata-trigger');
+      if (!trigger) return;
+      const article = trigger.closest('article');
+      const rowTop = article.offsetTop;
+      const rowArticles = Array.from(grid.querySelectorAll('article')).filter(item => item.offsetTop === rowTop);
+      const shouldShow = !rowArticles.every(item => item.classList.contains('show-row-metadata'));
+      rowArticles.forEach(item => item.classList.toggle('show-row-metadata', shouldShow));
+    }});
+    grid.addEventListener('pointerover', event => {{
+      const video = event.target.closest('video');
+      if (video) activeVideo = video;
+    }});
+    grid.addEventListener('play', event => {{
+      if (event.target.tagName === 'VIDEO') activeVideo = event.target;
+    }}, true);
+    grid.addEventListener('focusin', event => {{
+      if (event.target.tagName === 'VIDEO') activeVideo = event.target;
+    }});
+    document.addEventListener('keydown', event => {{
+      const target = document.activeElement;
+      const tag = target?.tagName;
+      const isTyping = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || target?.isContentEditable;
+      if (isTyping || !activeVideo || !document.body.contains(activeVideo)) return;
+      if (event.key.toLowerCase() === 'f') {{
+        event.preventDefault();
+        activeVideo.requestFullscreen?.();
+      }}
+      if (event.code === 'Space') {{
+        event.preventDefault();
+        if (activeVideo.paused) activeVideo.play();
+        else activeVideo.pause();
+      }}
+    }});
     decades.addEventListener('click', event => {{
       const button = event.target.closest('[data-decade]');
       if (!button) return;
@@ -385,7 +556,7 @@ def render(items):
       activeRelease = button.dataset.release;
       render(true);
     }});
-    document.getElementById('clear').addEventListener('click', () => {{ q.value = ''; activeRelease = ''; activeDecade = ''; render(true); }});
+    document.getElementById('clear').addEventListener('click', () => {{ q.value = ''; activeRelease = ''; activeDecade = ''; activeMarkerFilter = ''; render(true); }});
     document.getElementById('collapse').addEventListener('click', () => document.querySelectorAll('video').forEach(v => v.pause()));
     render();
   </script>
