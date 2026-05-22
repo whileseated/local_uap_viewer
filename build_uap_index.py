@@ -43,14 +43,16 @@ def clean_text(value):
 
 def trim_description(value):
     value = clean_text(value)
-    if value.startswith(REPETITIVE_DESCRIPTION_PREFIX):
-        value = value[len(REPETITIVE_DESCRIPTION_PREFIX):].lstrip()
     value = value.replace("event’s", "event's")
+    value = value.replace("chain-of-custody.\"", "chain-of-custody.")
+    value = value.replace(REPETITIVE_DESCRIPTION_PREFIX, "")
     value = value.replace(REPETITIVE_DESCRIPTION_DISCLAIMER, "")
+    value = re.sub(r'^\s*"\s*', "", value)
+    value = re.sub(r'\s*"\s*$', "", value)
     value = re.sub(r"\n{3,}", "\n\n", value)
     value = re.sub(r"\s*\n?\s*(Video Duration:)", r"\n\n\1", value)
     value = re.sub(r"\n{3,}", "\n\n", value)
-    return value
+    return value.strip()
 
 
 def table_value(label, body):
