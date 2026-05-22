@@ -1,11 +1,11 @@
 # Local UAP Video Index
 
-This folder contains a way to view MP4 downloads from `war.gov/UFO` **locally**, grouped by release, with a generated `index.html` page for browsing, searching & sorting without pagination, or annoying modals.  
+This repo provides a local viewer for MP4 downloads from `war.gov/UFO`, grouped by release, with a generated `index.html` page for browsing, searching, filtering, sorting, and playing videos without pagination or modals.
 
-Clone the repo, download each release into folders (release_01 or release_02) described below, and open index.html in your browser.  
+Clone the repo, download each release into the folders below, and open `index.html` in your browser.
 
 Release 1: https://d34w7g4gy10iej.cloudfront.net/uapvideos.zip  
-Release 2: https://d34w7g4gy10iej.cloudfront.net/uap052226.zip  
+Release 2: https://d34w7g4gy10iej.cloudfront.net/uap052226.zip
 
 ![Local UAP Video Index screenshot](img/Xnapper-2026-05-22-16.08.57.png)
 
@@ -23,7 +23,10 @@ uap052226/
     video_2605_DOD_111719709_DOD_111719709.mp4
     video_2605_DOD_111719715_DOD_111719715.mp4
     ...
-  build_uap_index.py
+  thumbnails/
+    DOD_111688723.jpg
+    DOD_111719709.jpg
+    ...
   index.html
   uap-local-index.json
   README.md
@@ -36,107 +39,15 @@ release_03/
 release_04/
 ```
 
-Put the downloaded MP4s directly inside that release folder. The filename only needs to contain a `DOD_#########` id somewhere in it.
+Put downloaded MP4s directly inside that release folder. The filename only needs to contain a `DOD_#########` id somewhere in it.
 
-## Generated Files
+## Opening The Viewer
 
-`index.html` is the local browser page. Open it directly in a browser.
+Open `index.html` directly in a browser. No server is required.
 
-`uap-local-index.json` is the structured metadata used by the page. It includes the local file path, release, DOD id, title, DVIDS link, War.gov hash link, dates, location, duration, VIRIN, and description.
+The page embeds every local MP4 as a playable video card and uses generated thumbnails from `thumbnails/` when available.
 
-## Local Metadata Cache
-
-During metadata refreshes, DVIDS HTML pages may be saved under `.dvids-cache/`.
-That folder is a local build cache and does not need to be committed to a public repo. The generated metadata lives in `uap-local-index.json`.
-
-Cache layout, if present:
-
-```text
-.dvids-cache/
-  DOD_*.html
-  details/
-    *.html
-```
-
-## Regenerating
-
-After adding videos to a release folder, run:
-
-```sh
-python3 build_uap_index.py
-```
-
-That scans every `release_*/` folder and rewrites `index.html` and `uap-local-index.json`.
-
-If new videos do not yet have metadata, populate the DVIDS cache for their `DOD_...` ids, then rerun the generator.
-
-## Metadata Workflow
-
-The generator does not currently download metadata from War.gov. War.gov's CSV/data endpoint returned `403` during direct command-line attempts, so the index uses DVIDS as the practical metadata source.
-
-For each local MP4, the script extracts the `DOD_#########` id from the filename. Example:
-
-```text
-release_02/video_2605_DOD_111719709_DOD_111719709.mp4
-```
-
-becomes:
-
-```text
-DOD_111719709
-```
-
-That id was searched on DVIDS:
-
-```sh
-curl -fsSL "https://www.dvidshub.net/search/?q=DOD_111719709" -o ".dvids-cache/DOD_111719709.html"
-```
-
-The search result page exposes the matching DVIDS video URL, title, and poster frame. Example:
-
-```text
-https://www.dvidshub.net/video/1007706/dow-uap-pr050-4-uap-formation-iran-26-aug-2022-over-water-callsign
-```
-
-Then the DVIDS detail page was cached:
-
-```sh
-curl -fsSL "https://www.dvidshub.net/video/1007706/dow-uap-pr050-4-uap-formation-iran-26-aug-2022-over-water-callsign" -o ".dvids-cache/details/1007706.html"
-```
-
-The detail page provides the richer metadata parsed into `uap-local-index.json`:
-
-- title
-- description
-- poster image
-- DVIDS video id
-- source MP4 URL
-- date taken
-- date posted
-- location
-- VIRIN
-- duration
-- category
-
-The War.gov record URL is reconstructed from the title as a hash link. For example:
-
-```text
-DOW-UAP-PR050, "4 UAP Formation Iran 26 Aug 2022 over water [CALLSIGN]"
-```
-
-becomes:
-
-```text
-https://www.war.gov/UFO/#DOW-UAP-PR050-4-UAP-Formation-Iran-26-Aug-2022-over-water-CALLSIGN
-```
-
-The generator also normalizes DOW PR numbers to three digits, so `PR19` becomes `PR019` for display and War.gov hash links.
-
-## How The Page Works
-
-The page embeds every local MP4 as a playable video card. It does not use pagination.
-
-Controls:
+## Page Controls
 
 - Search filters by title, DOD id, PR number, description, and filename.
 - Video markers are saved in the browser using `localStorage`, keyed by DOD id.
@@ -144,10 +55,10 @@ Controls:
 - The marker dropdown filters to Faves, Dislikes, or Unfaved videos and shows counts.
 - Release pills show all videos or only one release, with counts.
 - Decade pills filter by `date_taken`, with counts.
-- Sort changes ordering by title, file size, or DOD id.
+- Sort changes ordering by title, date taken, file size, or DOD id.
 - Show metadata toggles all metadata on or off.
-- Clicking a card's top metadata strip shows metadata for every card in that grid row.
-- Press `f` to fullscreen the most recently hovered, focused, or played video.
+- Clicking a card's top metadata strip or title shows metadata for every card in that grid row.
+- Press `f` to fullscreen and play the most recently selected, hovered, focused, or played video.
 - Press Space to play or pause the active video.
 - Typing in search automatically shows metadata and highlights the search term in pale yellow.
 - Clear resets search and filters.

@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parent
 CACHE_DIR = ROOT / ".dvids-cache"
 OUT = ROOT / "index.html"
 DATA_OUT = ROOT / "uap-local-index.json"
+THUMBNAILS_DIR = ROOT / "thumbnails"
 RELEASE_DIR_PATTERN = re.compile(r"^release_(\d+)$")
 REPETITIVE_DESCRIPTION_PREFIX = (
     "On March 6, 2026, eight members of the U.S. House of Representatives requested access to 51 "
@@ -51,6 +52,7 @@ def trim_description(value):
     value = re.sub(r'\s*"\s*$', "", value)
     value = re.sub(r"\n{3,}", "\n\n", value)
     value = re.sub(r"\s*\n?\s*(Video Duration:)", r"\n\n\1", value)
+    value = re.sub(r"\s*\n?\s*(Video Description:)", r"\n\n\1", value)
     value = re.sub(r"\n{3,}", "\n\n", value)
     return value.strip()
 
@@ -199,6 +201,9 @@ def records():
             "mtime": datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds"),
         }
         item.update(parse_search_cache(dod_id))
+        thumbnail = THUMBNAILS_DIR / f"{dod_id}.jpg"
+        if thumbnail.exists():
+            item["thumbnail"] = thumbnail.relative_to(ROOT).as_posix()
         if dod_id in csv_rows:
             item["csv"] = csv_rows[dod_id]
         if not item.get("title"):
@@ -420,7 +425,7 @@ def render(items):
     }}
     function card(r, term) {{
       const hay = [r.title, r.dod_id, r.pr, r.description, r.filename].join(' ');
-      const poster = r.poster || '';
+      const poster = r.thumbnail || r.poster || '';
       const links = [
         r.dvids_url && `<a class="pill" href="${{esc(r.dvids_url)}}" target="_blank" rel="noreferrer">DVIDS</a>`,
         r.war_url && `<a class="pill" href="${{esc(r.war_url)}}" target="_blank" rel="noreferrer">War.gov record</a>`,
@@ -516,6 +521,7 @@ def render(items):
       const trigger = event.target.closest('.kicker, .metadata-trigger');
       if (!trigger) return;
       const article = trigger.closest('article');
+      activeVideo = article.querySelector('video');
       const rowTop = article.offsetTop;
       const rowArticles = Array.from(grid.querySelectorAll('article')).filter(item => item.offsetTop === rowTop);
       const shouldShow = !rowArticles.every(item => item.classList.contains('show-row-metadata'));
@@ -539,6 +545,7 @@ def render(items):
       if (event.key.toLowerCase() === 'f') {{
         event.preventDefault();
         activeVideo.requestFullscreen?.();
+        activeVideo.play();
       }}
       if (event.code === 'Space') {{
         event.preventDefault();
