@@ -139,6 +139,8 @@ The page embeds every local MP4 as a playable video card. It does not use pagina
 Controls:
 
 - Search filters by title, DOD id, PR number, description, and filename.
+- Favorites are saved in the browser using `localStorage`, keyed by DOD id.
+- The Favorites button filters to only favorited videos and shows the favorite count.
 - Release pills show all videos or only one release, with counts.
 - Decade pills filter by `date_taken`, with counts.
 - Sort changes ordering by title, file size, or DOD id.
