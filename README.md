@@ -7,7 +7,7 @@ Clone the repo, download each release into the folders below, and open `index.ht
 Release 1: https://d34w7g4gy10iej.cloudfront.net/uapvideos.zip  
 Release 2: https://d34w7g4gy10iej.cloudfront.net/uap052226.zip
 
-![Local UAP Video Index screenshot](img/Xnapper-2026-05-22-16.08.57.png)
+![Local UAP Video Index screenshot](img/Xnapper-2026-05-22-18.42.46.png)
 
 ## Folder Structure
 

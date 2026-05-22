@@ -5,64 +5,340 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Local UAP Video Index</title>
   <style>
-    :root { color-scheme: dark; --bg:#111314; --panel:#191d1f; --line:#30363a; --text:#f1f3f2; --muted:#a7b0ad; --accent:#69c7b7; --warn:#e5b769; }
-    * { box-sizing:border-box; }
-    body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
-    header { position:sticky; top:0; z-index:2; background:rgba(17,19,20,.94); border-bottom:1px solid var(--line); backdrop-filter: blur(10px); }
-    .wrap { max-width:1440px; margin:0 auto; padding:18px; }
-    h1 { margin:0 0 12px; font-size:24px; letter-spacing:0; }
-    .controls { display:grid; grid-template-columns:minmax(220px,1fr) auto auto auto auto; gap:10px; align-items:center; }
-    input, select, button { min-height:38px; border:1px solid var(--line); border-radius:6px; background:#0d0f10; color:var(--text); padding:0 10px; font:inherit; }
-    button { cursor:pointer; }
-    .io-wrap { position:relative; }
-    .io-menu { position:absolute; right:0; top:calc(100% + 6px); z-index:4; display:none; min-width:150px; border:1px solid var(--line); border-radius:6px; background:#0d0f10; padding:6px; box-shadow:0 12px 30px rgba(0,0,0,.35); }
-    .io-menu.open { display:grid; gap:6px; }
-    .io-menu button { width:100%; text-align:left; }
-    .filter-row { display:grid; grid-template-columns:auto 1fr; gap:10px; align-items:start; margin-top:12px; }
-    .filter-label { color:var(--muted); font-size:12px; line-height:30px; text-transform:uppercase; letter-spacing:.08em; }
-    .filter-pills { display:flex; flex-wrap:wrap; gap:8px; }
-    .filter-pill { min-height:30px; border-radius:999px; padding:0 10px; color:var(--muted); }
-    .filter-pill.active { border-color:var(--accent); color:var(--text); background:#14302c; }
-    .marker-button { min-height:0; width:1.45em; height:1.25em; border:0; border-radius:999px; background:transparent; color:var(--muted); padding:0; font:inherit; font-size:1.08em; line-height:1.2; opacity:.76; }
-    .marker-button:hover, .marker-button.active { color:var(--accent); opacity:1; }
-    .summary { color:var(--muted); font-size:13px; margin-top:10px; }
-    main { max-width:1440px; margin:0 auto; padding:18px; }
-    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(430px,1fr)); gap:14px; }
-    article { border:1px solid var(--line); border-radius:8px; background:var(--panel); overflow:hidden; }
-    video { display:block; width:100%; aspect-ratio:16/9; background:#050606; }
-    .body { padding:14px; }
-    .kicker { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:8px; color:var(--muted); font:12px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; cursor:pointer; }
-    .kicker:hover, h2.metadata-trigger:hover { color:var(--text); }
-    h2 { margin:0; font-size:17px; line-height:1.3; letter-spacing:0; }
-    h2.metadata-trigger { cursor:pointer; }
-    p { margin:10px 0 0; color:var(--muted); }
-    .description { white-space:pre-line; }
-    .metadata { display:none; }
-    .show-all-metadata .metadata, article.show-row-metadata .metadata, .searching .metadata { display:block; }
-    mark { background:#fff2a8; color:#161616; border-radius:2px; padding:0 .08em; }
-    .links { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-    a { color:var(--accent); text-decoration:none; }
-    a:hover { text-decoration:underline; }
-    .pill { border:1px solid var(--line); border-radius:999px; padding:4px 8px; font-size:12px; color:var(--muted); }
-    .missing { color:var(--warn); }
-    @media (max-width:760px) {
-      .controls { grid-template-columns:1fr; }
-      .grid { grid-template-columns:1fr; }
+    /* ------------------------------------------------------------------
+       Local UAP Video Index — minimal modernized
+       Type system: 11–15px. Mono for system metadata (kicker, chips,
+       counts, tags) so chrome reads as "data", not "marketing".
+       Color: warm-neutral near-blacks via oklch; one cool accent for state.
+       Control system: 28px height, 4px corners, hairline borders,
+       ghost-by-default. No filled chips.
+       ------------------------------------------------------------------ */
+    :root {
+      color-scheme: dark;
+      --bg:        oklch(0.18 0.004 220);
+      --bg-2:      oklch(0.16 0.004 220);
+      --panel:     oklch(0.22 0.004 220);
+      --panel-2:   oklch(0.25 0.005 220);
+      --line:      oklch(0.30 0.005 220);
+      --line-2:    oklch(0.38 0.006 220);
+      --text:      oklch(0.95 0.004 220);
+      --muted:     oklch(0.66 0.006 220);
+      --faint:     oklch(0.50 0.006 220);
+      --accent:    oklch(0.76 0.07 185);
+      --warn:      oklch(0.78 0.10 75);
+      --mark:      oklch(0.88 0.13 95);
+
+      --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Helvetica, system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.5 var(--sans);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* ---------- Header ---------- */
+    header {
+      position: sticky; top: 0; z-index: 4;
+      background: oklch(0.18 0.004 220 / 0.92);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: saturate(140%) blur(12px);
+      -webkit-backdrop-filter: saturate(140%) blur(12px);
+    }
+    .wrap { max-width: 1440px; margin: 0 auto; padding: 14px 20px 12px; }
+
+    .brand {
+      display: flex; align-items: baseline; gap: 10px;
+      margin-bottom: 12px;
+    }
+    .brand h1 {
+      margin: 0;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+    .brand .meta {
+      font: 11px/1 var(--mono);
+      color: var(--faint);
+    }
+
+    /* ---------- Controls (search + ghost buttons + selects) ---------- */
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    .controls input[type="search"] {
+      flex: 1 1 280px;
+      max-width: 480px;
+    }
+    .controls .spacer { flex: 1 1 0; min-width: 0; }
+    .controls [hidden] { display: none !important; }
+    .controls input,
+    .controls select,
+    .controls button {
+      height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--bg-2);
+      color: var(--text);
+      padding: 0 10px;
+      font: 12px/1 var(--sans);
+      letter-spacing: 0.005em;
+      outline: none;
+      transition: border-color 120ms, color 120ms, background 120ms;
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-start;
+    }
+    .controls button { justify-content: center; }
+    .controls input { font-size: 13px; }
+    .controls input::placeholder { color: var(--faint); }
+    .controls input:focus,
+    .controls select:focus,
+    .controls button:focus-visible { border-color: var(--line-2); }
+    .controls input:focus { border-color: var(--accent); }
+
+    .controls select {
+      appearance: none; -webkit-appearance: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%23808a86' stroke-width='1.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+      background-repeat: no-repeat;
+      background-position: right 9px center;
+      background-size: 9px 6px;
+      padding-right: 26px;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .controls select:hover { color: var(--text); border-color: var(--line-2); }
+
+    .controls button {
+      cursor: pointer;
+      background: transparent;
+      color: var(--muted);
+    }
+    .controls button:hover { color: var(--text); border-color: var(--line-2); }
+    .controls button[aria-pressed="true"] {
+      color: var(--text);
+      background: var(--panel);
+      border-color: var(--line-2);
+    }
+
+    .icon-btn { width: 28px; padding: 0; }
+    .icon-btn svg { display: block; flex: none; }
+
+    /* ---------- Popover ---------- */
+    .io-wrap { position: relative; }
+    .io-menu {
+      position: absolute; right: 0; top: calc(100% + 6px);
+      z-index: 5;
+      display: none;
+      min-width: 180px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: var(--panel);
+      padding: 4px;
+      box-shadow:
+        0 1px 0 0 oklch(1 0 0 / 0.03) inset,
+        0 20px 50px -16px rgba(0,0,0,0.7),
+        0 4px 12px -6px rgba(0,0,0,0.5);
+    }
+    .io-menu.open { display: grid; gap: 1px; }
+    .io-menu button {
+      width: 100%;
+      height: 26px;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      text-align: left;
+      padding: 0 8px;
+      border-radius: 3px;
+      font: 12px/1 var(--sans);
+      cursor: pointer;
+    }
+    .io-menu button:hover { background: var(--panel-2); }
+
+    /* ---------- Filter strip ---------- */
+    .filters {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--line);
+      display: grid;
+      grid-template-columns: 70px 1fr;
+      column-gap: 12px;
+      row-gap: 6px;
+      align-items: baseline;
+    }
+    .filters .label {
+      color: var(--faint);
+      font: 10px/1.4 var(--mono);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .chips {
+      display: flex; flex-wrap: wrap;
+      gap: 2px 14px;
+    }
+    .chip {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      padding: 2px 0 3px;
+      color: var(--muted);
+      font: 11px/1.4 var(--mono);
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      box-shadow: inset 0 -1px 0 transparent;
+      transition: color 120ms, box-shadow 120ms;
+    }
+    .chip:hover { color: var(--text); }
+    .chip.active {
+      color: var(--text);
+      box-shadow: inset 0 -2px 0 var(--accent);
+    }
+    .chip .count {
+      color: var(--faint);
+      margin-left: 4px;
+    }
+    .chip.active .count { color: var(--muted); }
+
+    .summary {
+      margin-top: 10px;
+      color: var(--faint);
+      font: 11px/1.5 var(--mono);
+    }
+
+    /* ---------- Grid + cards ---------- */
+    main { max-width: 1440px; margin: 0 auto; padding: 20px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+      gap: 18px;
+    }
+    article {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow: hidden;
+      transition: border-color 160ms, transform 160ms;
+    }
+    article:hover { border-color: var(--line-2); }
+
+    video {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #000;
+    }
+
+    .body { padding: 12px 14px 14px; }
+
+    /* The kicker — user likes this, kept intact in voice, only tightened spacing */
+    .kicker {
+      display: flex; flex-wrap: wrap; align-items: center;
+      gap: 4px 12px;
+      margin-bottom: 8px;
+      color: var(--faint);
+      font: 11px/1.4 var(--mono);
+      letter-spacing: 0.01em;
+      cursor: pointer;
+    }
+    .kicker:hover { color: var(--muted); }
+    .kicker .missing { color: var(--warn); }
+
+    .marker-button {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--faint);
+      padding: 0;
+      margin-left: auto;
+      cursor: pointer;
+      font: 11px/1 var(--mono);
+      letter-spacing: 0;
+      width: 18px; height: 18px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 3px;
+      transition: color 120ms, background 120ms;
+    }
+    .marker-button:hover { color: var(--text); background: var(--panel-2); }
+    .marker-button[data-state="fave"]    { color: var(--accent); }
+    .marker-button[data-state="dislike"] { color: var(--warn); }
+
+    h2 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 500;
+      line-height: 1.35;
+      letter-spacing: -0.005em;
+      color: var(--text);
+      text-wrap: pretty;
+    }
+    h2.metadata-trigger { cursor: pointer; }
+    h2.metadata-trigger:hover { color: var(--muted); }
+
+    p { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+    .description { white-space: pre-line; }
+
+    .metadata { display: none; }
+    .show-all-metadata .metadata,
+    article.show-row-metadata .metadata,
+    .searching .metadata { display: block; margin-top: 10px; }
+
+    mark { background: var(--mark); color: #161616; border-radius: 2px; padding: 0 .12em; }
+
+    .links {
+      display: flex; flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 8px;
+    }
+    .tag, a.tag {
+      display: inline-flex; align-items: center;
+      height: 22px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      background: transparent;
+      color: var(--muted);
+      font: 11px/1 var(--mono);
+      letter-spacing: 0.01em;
+      text-decoration: none;
+      transition: color 120ms, border-color 120ms;
+    }
+    a.tag:hover { color: var(--text); border-color: var(--line-2); }
+
+    @media (max-width: 820px) {
+      .controls input { max-width: 100%; }
+      .controls .spacer { display: none; }
+      .filters { grid-template-columns: 60px 1fr; }
+      .grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
-  <header>
+  <header data-screen-label="Local UAP Video Index">
     <div class="wrap">
-      <h1>Local UAP Video Index</h1>
+      <div class="brand">
+        <h1>Local UAP Video Index</h1>
+        <span class="meta">85 MP4 · gen 20260522:18-40-29</span>
+      </div>
       <div class="controls">
-        <input id="q" type="search" placeholder="Search title, DOD id, PR number, description...">
-        <select id="sort">
-          <option value="title">Sort by title</option>
-          <option value="date_taken_desc">Sort by date taken</option>
-          <option value="size_desc">Largest files first</option>
-          <option value="size_asc">Smallest files first</option>
-          <option value="dod">Sort by DOD id</option>
+        <input id="q" type="search" placeholder="Search title, DOD id, PR number, description…">
+        <div class="spacer"></div>
+        <select id="sort" aria-label="Sort">
+          <option value="title">Sort · title</option>
+          <option value="date_taken_desc">Sort · date taken</option>
+          <option value="size_desc">Sort · largest</option>
+          <option value="size_asc">Sort · smallest</option>
+          <option value="dod">Sort · DOD id</option>
         </select>
         <select id="markerFilter" aria-label="Marker filter">
           <option value="">All markers</option>
@@ -70,26 +346,26 @@
           <option value="dislikes">Dislikes</option>
           <option value="unfaved">Unfaved</option>
         </select>
-        <button id="metadataToggle" type="button" aria-pressed="false">Show metadata</button>
+        <button id="metadataToggle" type="button" aria-pressed="false">Metadata</button>
         <div class="io-wrap">
-          <button id="markerIoToggle" type="button" aria-expanded="false">Faves import/export</button>
-          <div id="markerIoMenu" class="io-menu">
-            <button id="exportMarkers" type="button">Export markers</button>
-            <button id="importMarkers" type="button">Import markers</button>
+          <button id="markerIoToggle" class="icon-btn" type="button" aria-expanded="false" aria-label="Marker import / export" title="Marker import / export">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="3" cy="8" r="1.1"/><circle cx="8" cy="8" r="1.1"/><circle cx="13" cy="8" r="1.1"/></svg>
+          </button>
+          <div id="markerIoMenu" class="io-menu" role="menu">
+            <button id="exportMarkers" type="button">Export markers…</button>
+            <button id="importMarkers" type="button">Import markers…</button>
           </div>
           <input id="markerImportFile" type="file" accept="application/json,.json" hidden>
         </div>
-        <button id="clear">Clear</button>
+        <button id="clear" type="button" title="Clear search and filters">Clear</button>
       </div>
-      <div class="filter-row">
-        <div class="filter-label">Release</div>
-        <div id="releases" class="filter-pills" aria-label="View by release"></div>
+      <div class="filters">
+        <div class="label">Release</div>
+        <div id="releases" class="chips" aria-label="View by release"></div>
+        <div class="label">Decade</div>
+        <div id="decades" class="chips" aria-label="View by decade"></div>
       </div>
-      <div class="filter-row">
-        <div class="filter-label">Decade</div>
-        <div id="decades" class="filter-pills" aria-label="View by decade"></div>
-      </div>
-      <div class="summary"><span id="shown">85</span> of 85 local MP4s shown. Generated 2026-05-22 18:17. Metadata comes from cached DVIDS search pages when available; official War.gov hash links are reconstructed from DVIDS titles.</div>
+      <div class="summary"><span id="shown">85</span> of 85 local MP4s · metadata from cached DVIDS pages, hash links reconstructed from titles</div>
     </div>
   </header>
   <main><div id="grid" class="grid"></div></main>
@@ -193,9 +469,14 @@
       }
     }
     function markerIcon(dodId) {
-      if (favorites.has(dodId)) return '👍';
-      if (disliked.has(dodId)) return '👎';
-      return '☞';
+      if (favorites.has(dodId)) return '▲';
+      if (disliked.has(dodId)) return '▽';
+      return '+';
+    }
+    function markerState(dodId) {
+      if (favorites.has(dodId)) return 'fave';
+      if (disliked.has(dodId)) return 'dislike';
+      return 'unset';
     }
     function markerLabel(dodId) {
       if (favorites.has(dodId)) return 'Marked favorite. Click to mark thumbs down.';
@@ -206,7 +487,7 @@
       document.querySelectorAll(`[data-marker="${CSS.escape(dodId)}"]`).forEach(button => {
         const active = favorites.has(dodId) || disliked.has(dodId);
         const label = markerLabel(dodId);
-        button.classList.toggle('active', active);
+        button.setAttribute('data-state', markerState(dodId));
         button.setAttribute('aria-label', label);
         button.setAttribute('aria-pressed', active ? 'true' : 'false');
         button.setAttribute('title', label);
@@ -231,8 +512,8 @@
         if (b === 'Unknown') return -1;
         return Number(b.slice(0, 4)) - Number(a.slice(0, 4));
       });
-      decades.innerHTML = [`<button class="filter-pill ${activeDecade ? '' : 'active'}" type="button" data-decade="">All (${source.length})</button>`]
-        .concat(labels.map(label => `<button class="filter-pill ${activeDecade === label ? 'active' : ''}" type="button" data-decade="${esc(label)}">${esc(label.replace('s', ''))} (${counts[label]})</button>`))
+      decades.innerHTML = [`<button class="chip ${activeDecade ? '' : 'active'}" type="button" data-decade="">All<span class="count">${source.length}</span></button>`]
+        .concat(labels.map(label => `<button class="chip ${activeDecade === label ? 'active' : ''}" type="button" data-decade="${esc(label)}">${esc(label.replace('s', ''))}<span class="count">${counts[label]}</span></button>`))
         .join('');
     }
     function renderReleases() {
@@ -245,17 +526,17 @@
       }, {});
       if (activeRelease && !counts[activeRelease]) activeRelease = '';
       const keys = Object.keys(counts).sort((a, b) => counts[a].label.localeCompare(counts[b].label));
-      releases.innerHTML = [`<button class="filter-pill ${activeRelease ? '' : 'active'}" type="button" data-release="">All (${source.length})</button>`]
-        .concat(keys.map(key => `<button class="filter-pill ${activeRelease === key ? 'active' : ''}" type="button" data-release="${esc(key)}">${esc(counts[key].label)} (${counts[key].count})</button>`))
+      releases.innerHTML = [`<button class="chip ${activeRelease ? '' : 'active'}" type="button" data-release="">All<span class="count">${source.length}</span></button>`]
+        .concat(keys.map(key => `<button class="chip ${activeRelease === key ? 'active' : ''}" type="button" data-release="${esc(key)}">${esc(counts[key].label)}<span class="count">${counts[key].count}</span></button>`))
         .join('');
     }
     function card(r, term) {
       const hay = [r.title, r.dod_id, r.pr, r.description, r.filename].join(' ');
       const poster = r.thumbnail || r.poster || '';
       const links = [
-        r.dvids_url && `<a class="pill" href="${esc(r.dvids_url)}" target="_blank" rel="noreferrer">DVIDS</a>`,
-        r.war_url && `<a class="pill" href="${esc(r.war_url)}" target="_blank" rel="noreferrer">War.gov record</a>`,
-        r.source_mp4_url && `<a class="pill" href="${esc(r.source_mp4_url)}" target="_blank" rel="noreferrer">Source MP4</a>`
+        r.dvids_url && `<a class="tag" href="${esc(r.dvids_url)}" target="_blank" rel="noreferrer">DVIDS</a>`,
+        r.war_url && `<a class="tag" href="${esc(r.war_url)}" target="_blank" rel="noreferrer">War.gov record</a>`,
+        r.source_mp4_url && `<a class="tag" href="${esc(r.source_mp4_url)}" target="_blank" rel="noreferrer">Source MP4</a>`
       ].filter(Boolean).join('');
       const facts = [
         r.date_taken && `Taken ${r.date_taken}`,
@@ -263,7 +544,8 @@
         r.location && `Location ${r.location}`,
         r.duration && `Length ${r.duration}`,
         r.virin && `VIRIN ${r.virin}`
-      ].filter(Boolean).map(v => `<span class="pill">${marked(v, term)}</span>`).join('');
+      ].filter(Boolean).map(v => `<span class="tag">${marked(v, term)}</span>`).join('');
+      const pressed = (favorites.has(r.dod_id) || disliked.has(r.dod_id)) ? 'true' : 'false';
       return `<article data-hay="${esc(hay.toLowerCase())}">
         <video controls preload="metadata" playsinline poster="${esc(poster)}" data-dod-id="${esc(r.dod_id)}">
           <source src="${esc(r.path)}" type="video/mp4">
@@ -275,13 +557,13 @@
             <span>${marked(r.dod_id, term)}</span>
             <span>${marked(r.size_label, term)}</span>
             ${r.dvids_id ? `<span>DVIDS ${esc(r.dvids_id)}</span>` : '<span class="missing">metadata not cached</span>'}
-            <button class="marker-button ${favorites.has(r.dod_id) || disliked.has(r.dod_id) ? 'active' : ''}" type="button" data-marker="${esc(r.dod_id)}" aria-label="${esc(markerLabel(r.dod_id))}" aria-pressed="${favorites.has(r.dod_id) || disliked.has(r.dod_id) ? 'true' : 'false'}" title="${esc(markerLabel(r.dod_id))}">${markerIcon(r.dod_id)}</button>
+            <button class="marker-button" type="button" data-marker="${esc(r.dod_id)}" data-state="${markerState(r.dod_id)}" aria-label="${esc(markerLabel(r.dod_id))}" aria-pressed="${pressed}" title="${esc(markerLabel(r.dod_id))}">${markerIcon(r.dod_id)}</button>
           </div>
           <h2 class="metadata-trigger" title="Show metadata for this row">${marked(r.title, term)}</h2>
           <div class="metadata">
             ${facts ? `<div class="links">${facts}</div>` : ''}
             ${r.description ? `<p class="description">${marked(r.description, term)}</p>` : ''}
-            <div class="links"><a class="pill" href="${esc(r.path)}">Open local MP4</a>${links}</div>
+            <div class="links"><a class="tag" href="${esc(r.path)}">Open local MP4</a>${links}</div>
           </div>
         </div>
       </article>`;
@@ -319,7 +601,7 @@
       shown.textContent = list.length;
       document.body.classList.toggle('searching', Boolean(term));
       document.body.classList.toggle('show-all-metadata', showAllMetadata);
-      metadataToggle.textContent = showAllMetadata ? 'Hide metadata' : 'Show metadata';
+      metadataToggle.textContent = 'Metadata';
       metadataToggle.setAttribute('aria-pressed', showAllMetadata ? 'true' : 'false');
       updateMarkerFilter();
       grid.innerHTML = list.map(r => card(r, term)).join('');
