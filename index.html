@@ -11,7 +11,7 @@
     header { position:sticky; top:0; z-index:2; background:rgba(17,19,20,.94); border-bottom:1px solid var(--line); backdrop-filter: blur(10px); }
     .wrap { max-width:1440px; margin:0 auto; padding:18px; }
     h1 { margin:0 0 12px; font-size:24px; letter-spacing:0; }
-    .controls { display:grid; grid-template-columns:minmax(220px,1fr) auto auto auto auto auto; gap:10px; align-items:center; }
+    .controls { display:grid; grid-template-columns:minmax(220px,1fr) auto auto auto auto; gap:10px; align-items:center; }
     input, select, button { min-height:38px; border:1px solid var(--line); border-radius:6px; background:#0d0f10; color:var(--text); padding:0 10px; font:inherit; }
     button { cursor:pointer; }
     .filter-row { display:grid; grid-template-columns:auto 1fr; gap:10px; align-items:start; margin-top:12px; }
@@ -19,9 +19,8 @@
     .filter-pills { display:flex; flex-wrap:wrap; gap:8px; }
     .filter-pill { min-height:30px; border-radius:999px; padding:0 10px; color:var(--muted); }
     .filter-pill.active { border-color:var(--accent); color:var(--text); background:#14302c; }
-    .favorite-button { min-height:0; width:auto; height:1.2em; border:0; border-radius:999px; background:transparent; color:var(--muted); padding:0; font:inherit; line-height:1.2; opacity:.62; }
-    .favorite-button:hover, .favorite-button.active { color:var(--accent); opacity:1; }
-    #favoritesFilter.active { border-color:var(--accent); color:var(--text); background:#14302c; }
+    .marker-button { min-height:0; width:1.45em; height:1.25em; border:0; border-radius:999px; background:transparent; color:var(--muted); padding:0; font:inherit; font-size:1.08em; line-height:1.2; opacity:.76; }
+    .marker-button:hover, .marker-button.active { color:var(--accent); opacity:1; }
     .summary { color:var(--muted); font-size:13px; margin-top:10px; }
     main { max-width:1440px; margin:0 auto; padding:18px; }
     .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(430px,1fr)); gap:14px; }
@@ -61,7 +60,12 @@
           <option value="size_asc">Smallest files first</option>
           <option value="dod">Sort by DOD id</option>
         </select>
-        <button id="favoritesFilter" type="button" aria-pressed="false">Favorites (0)</button>
+        <select id="markerFilter" aria-label="Marker filter">
+          <option value="">All markers</option>
+          <option value="faves">Faves</option>
+          <option value="dislikes">Dislikes</option>
+          <option value="unfaved">Unfaved</option>
+        </select>
         <button id="metadataToggle" type="button" aria-pressed="false">Show metadata</button>
         <button id="collapse">Pause all</button>
         <button id="clear">Clear</button>
@@ -74,7 +78,7 @@
         <div class="filter-label">Decade</div>
         <div id="decades" class="filter-pills" aria-label="View by decade"></div>
       </div>
-      <div class="summary"><span id="shown">85</span> of 85 local MP4s shown. Generated 2026-05-22 15:02. Metadata comes from cached DVIDS search pages when available; official War.gov hash links are reconstructed from DVIDS titles.</div>
+      <div class="summary"><span id="shown">85</span> of 85 local MP4s shown. Generated 2026-05-22 16:04. Metadata comes from cached DVIDS search pages when available; official War.gov hash links are reconstructed from DVIDS titles.</div>
     </div>
   </header>
   <main><div id="grid" class="grid"></div></main>
@@ -88,14 +92,17 @@
     const releases = document.getElementById('releases');
     const decades = document.getElementById('decades');
     const resultsTop = document.querySelector('main');
-    const favoritesFilter = document.getElementById('favoritesFilter');
+    const markerFilter = document.getElementById('markerFilter');
     const metadataToggle = document.getElementById('metadataToggle');
     const FAVORITES_KEY = 'uapVideoFavorites';
+    const DISLIKED_KEY = 'uapVideoDisliked';
     let activeRelease = '';
     let activeDecade = '';
     let showAllMetadata = false;
-    let showFavoritesOnly = false;
+    let activeMarkerFilter = '';
     let favorites = new Set(JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]'));
+    let disliked = new Set(JSON.parse(localStorage.getItem(DISLIKED_KEY) || '[]'));
+    let activeVideo = null;
     const esc = value => String(value || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     function escapeRegExp(value) {
       return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -108,17 +115,58 @@
     function saveFavorites() {
       localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites].sort()));
     }
-    function updateFavoritesFilter() {
-      favoritesFilter.textContent = `Favorites (${favorites.size})`;
-      favoritesFilter.classList.toggle('active', showFavoritesOnly);
-      favoritesFilter.setAttribute('aria-pressed', showFavoritesOnly ? 'true' : 'false');
+    function saveDisliked() {
+      localStorage.setItem(DISLIKED_KEY, JSON.stringify([...disliked].sort()));
     }
-    function toggleFavorite(dodId) {
-      if (favorites.has(dodId)) favorites.delete(dodId);
-      else favorites.add(dodId);
+    function updateMarkerFilter() {
+      markerFilter.options[0].textContent = `All markers (${records.length})`;
+      markerFilter.options[1].textContent = `Faves (${favorites.size})`;
+      markerFilter.options[2].textContent = `Dislikes (${disliked.size})`;
+      markerFilter.options[3].textContent = `Unfaved (${records.length - favorites.size - disliked.size})`;
+      markerFilter.value = activeMarkerFilter;
+    }
+    function cycleMarker(dodId) {
+      if (!favorites.has(dodId) && !disliked.has(dodId)) {
+        favorites.add(dodId);
+        disliked.delete(dodId);
+      } else if (favorites.has(dodId)) {
+        favorites.delete(dodId);
+        disliked.add(dodId);
+      } else {
+        disliked.delete(dodId);
+      }
       saveFavorites();
-      if (showFavoritesOnly && favorites.size === 0) showFavoritesOnly = false;
-      render(false);
+      saveDisliked();
+      if ((activeMarkerFilter === 'faves' && favorites.size === 0) || (activeMarkerFilter === 'dislikes' && disliked.size === 0)) {
+        activeMarkerFilter = '';
+      }
+      if (activeMarkerFilter) {
+        render(false);
+      } else {
+        updateMarkerFilter();
+        updateMarkerButtons(dodId);
+      }
+    }
+    function markerIcon(dodId) {
+      if (favorites.has(dodId)) return '👍';
+      if (disliked.has(dodId)) return '👎';
+      return '☞';
+    }
+    function markerLabel(dodId) {
+      if (favorites.has(dodId)) return 'Marked favorite. Click to mark thumbs down.';
+      if (disliked.has(dodId)) return 'Marked thumbs down. Click to clear marker.';
+      return 'No marker. Click to mark favorite.';
+    }
+    function updateMarkerButtons(dodId) {
+      document.querySelectorAll(`[data-marker="${CSS.escape(dodId)}"]`).forEach(button => {
+        const active = favorites.has(dodId) || disliked.has(dodId);
+        const label = markerLabel(dodId);
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-label', label);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        button.setAttribute('title', label);
+        button.textContent = markerIcon(dodId);
+      });
     }
     function decadeOf(r) {
       const match = String(r.date_taken || '').match(/(\d{4})$/);
@@ -182,7 +230,7 @@
             <span>${marked(r.dod_id, term)}</span>
             <span>${marked(r.size_label, term)}</span>
             ${r.dvids_id ? `<span>DVIDS ${esc(r.dvids_id)}</span>` : '<span class="missing">metadata not cached</span>'}
-            <button class="favorite-button ${favorites.has(r.dod_id) ? 'active' : ''}" type="button" data-favorite="${esc(r.dod_id)}" aria-label="Toggle favorite" aria-pressed="${favorites.has(r.dod_id) ? 'true' : 'false'}" title="Toggle favorite">${favorites.has(r.dod_id) ? '★' : '☆'}</button>
+            <button class="marker-button ${favorites.has(r.dod_id) || disliked.has(r.dod_id) ? 'active' : ''}" type="button" data-marker="${esc(r.dod_id)}" aria-label="${esc(markerLabel(r.dod_id))}" aria-pressed="${favorites.has(r.dod_id) || disliked.has(r.dod_id) ? 'true' : 'false'}" title="${esc(markerLabel(r.dod_id))}">${markerIcon(r.dod_id)}</button>
           </div>
           <h2 class="metadata-trigger" title="Show metadata for this row">${marked(r.title, term)}</h2>
           <div class="metadata">
@@ -195,9 +243,7 @@
     }
     function scrollToResults() {
       const header = document.querySelector('header');
-      const headerBottom = header.getBoundingClientRect().bottom + window.scrollY;
       const target = Math.max(0, resultsTop.getBoundingClientRect().top + window.scrollY - header.offsetHeight - 18);
-      if (window.scrollY < headerBottom) return;
       window.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
     }
     function dateTakenValue(r) {
@@ -211,8 +257,12 @@
         const matchesTerm = !term || [r.title, r.dod_id, r.pr, r.description, r.filename].join(' ').toLowerCase().includes(term);
         const matchesRelease = !activeRelease || r.release === activeRelease;
         const matchesDecade = !activeDecade || decadeOf(r) === activeDecade;
-        const matchesFavorite = !showFavoritesOnly || favorites.has(r.dod_id);
-        return matchesTerm && matchesRelease && matchesDecade && matchesFavorite;
+        const matchesMarker =
+          !activeMarkerFilter ||
+          (activeMarkerFilter === 'faves' && favorites.has(r.dod_id)) ||
+          (activeMarkerFilter === 'dislikes' && disliked.has(r.dod_id)) ||
+          (activeMarkerFilter === 'unfaved' && !favorites.has(r.dod_id) && !disliked.has(r.dod_id));
+        return matchesTerm && matchesRelease && matchesDecade && matchesMarker;
       });
       list.sort((a,b) => {
         if (sort.value === 'size_desc') return b.size - a.size;
@@ -226,7 +276,7 @@
       document.body.classList.toggle('show-all-metadata', showAllMetadata);
       metadataToggle.textContent = showAllMetadata ? 'Hide metadata' : 'Show metadata';
       metadataToggle.setAttribute('aria-pressed', showAllMetadata ? 'true' : 'false');
-      updateFavoritesFilter();
+      updateMarkerFilter();
       grid.innerHTML = list.map(r => card(r, term)).join('');
       renderDecades();
       renderReleases();
@@ -238,15 +288,15 @@
       showAllMetadata = !showAllMetadata;
       render(false);
     });
-    favoritesFilter.addEventListener('click', () => {
-      showFavoritesOnly = !showFavoritesOnly;
+    markerFilter.addEventListener('change', () => {
+      activeMarkerFilter = markerFilter.value;
       render(true);
     });
     grid.addEventListener('click', event => {
-      const favoriteButton = event.target.closest('[data-favorite]');
-      if (favoriteButton) {
+      const markerButton = event.target.closest('[data-marker]');
+      if (markerButton) {
         event.stopPropagation();
-        toggleFavorite(favoriteButton.dataset.favorite);
+        cycleMarker(markerButton.dataset.marker);
         return;
       }
       const trigger = event.target.closest('.kicker, .metadata-trigger');
@@ -256,6 +306,31 @@
       const rowArticles = Array.from(grid.querySelectorAll('article')).filter(item => item.offsetTop === rowTop);
       const shouldShow = !rowArticles.every(item => item.classList.contains('show-row-metadata'));
       rowArticles.forEach(item => item.classList.toggle('show-row-metadata', shouldShow));
+    });
+    grid.addEventListener('pointerover', event => {
+      const video = event.target.closest('video');
+      if (video) activeVideo = video;
+    });
+    grid.addEventListener('play', event => {
+      if (event.target.tagName === 'VIDEO') activeVideo = event.target;
+    }, true);
+    grid.addEventListener('focusin', event => {
+      if (event.target.tagName === 'VIDEO') activeVideo = event.target;
+    });
+    document.addEventListener('keydown', event => {
+      const target = document.activeElement;
+      const tag = target?.tagName;
+      const isTyping = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || target?.isContentEditable;
+      if (isTyping || !activeVideo || !document.body.contains(activeVideo)) return;
+      if (event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        activeVideo.requestFullscreen?.();
+      }
+      if (event.code === 'Space') {
+        event.preventDefault();
+        if (activeVideo.paused) activeVideo.play();
+        else activeVideo.pause();
+      }
     });
     decades.addEventListener('click', event => {
       const button = event.target.closest('[data-decade]');
@@ -269,7 +344,7 @@
       activeRelease = button.dataset.release;
       render(true);
     });
-    document.getElementById('clear').addEventListener('click', () => { q.value = ''; activeRelease = ''; activeDecade = ''; showFavoritesOnly = false; render(true); });
+    document.getElementById('clear').addEventListener('click', () => { q.value = ''; activeRelease = ''; activeDecade = ''; activeMarkerFilter = ''; render(true); });
     document.getElementById('collapse').addEventListener('click', () => document.querySelectorAll('video').forEach(v => v.pause()));
     render();
   </script>

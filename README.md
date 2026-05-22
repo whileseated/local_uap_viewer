@@ -139,13 +139,16 @@ The page embeds every local MP4 as a playable video card. It does not use pagina
 Controls:
 
 - Search filters by title, DOD id, PR number, description, and filename.
-- Favorites are saved in the browser using `localStorage`, keyed by DOD id.
-- The Favorites button filters to only favorited videos and shows the favorite count.
+- Video markers are saved in the browser using `localStorage`, keyed by DOD id.
+- The marker cycles from neutral to favorite to thumbs-down to neutral.
+- The marker dropdown filters to Faves, Dislikes, or Unfaved videos and shows counts.
 - Release pills show all videos or only one release, with counts.
 - Decade pills filter by `date_taken`, with counts.
 - Sort changes ordering by title, file size, or DOD id.
 - Show metadata toggles all metadata on or off.
 - Clicking a card's top metadata strip shows metadata for every card in that grid row.
+- Press `f` to fullscreen the most recently hovered, focused, or played video.
+- Press Space to play or pause the active video.
 - Typing in search automatically shows metadata and highlights the search term in pale yellow.
 - Clear resets search and filters.
 - Pause all stops every currently loaded video.
