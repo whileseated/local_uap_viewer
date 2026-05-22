@@ -14,6 +14,10 @@
     .controls { display:grid; grid-template-columns:minmax(220px,1fr) auto auto auto auto; gap:10px; align-items:center; }
     input, select, button { min-height:38px; border:1px solid var(--line); border-radius:6px; background:#0d0f10; color:var(--text); padding:0 10px; font:inherit; }
     button { cursor:pointer; }
+    .io-wrap { position:relative; }
+    .io-menu { position:absolute; right:0; top:calc(100% + 6px); z-index:4; display:none; min-width:150px; border:1px solid var(--line); border-radius:6px; background:#0d0f10; padding:6px; box-shadow:0 12px 30px rgba(0,0,0,.35); }
+    .io-menu.open { display:grid; gap:6px; }
+    .io-menu button { width:100%; text-align:left; }
     .filter-row { display:grid; grid-template-columns:auto 1fr; gap:10px; align-items:start; margin-top:12px; }
     .filter-label { color:var(--muted); font-size:12px; line-height:30px; text-transform:uppercase; letter-spacing:.08em; }
     .filter-pills { display:flex; flex-wrap:wrap; gap:8px; }
@@ -67,7 +71,14 @@
           <option value="unfaved">Unfaved</option>
         </select>
         <button id="metadataToggle" type="button" aria-pressed="false">Show metadata</button>
-        <button id="collapse">Pause all</button>
+        <div class="io-wrap">
+          <button id="markerIoToggle" type="button" aria-expanded="false">Faves import/export</button>
+          <div id="markerIoMenu" class="io-menu">
+            <button id="exportMarkers" type="button">Export markers</button>
+            <button id="importMarkers" type="button">Import markers</button>
+          </div>
+          <input id="markerImportFile" type="file" accept="application/json,.json" hidden>
+        </div>
         <button id="clear">Clear</button>
       </div>
       <div class="filter-row">
@@ -78,7 +89,7 @@
         <div class="filter-label">Decade</div>
         <div id="decades" class="filter-pills" aria-label="View by decade"></div>
       </div>
-      <div class="summary"><span id="shown">85</span> of 85 local MP4s shown. Generated 2026-05-22 18:03. Metadata comes from cached DVIDS search pages when available; official War.gov hash links are reconstructed from DVIDS titles.</div>
+      <div class="summary"><span id="shown">85</span> of 85 local MP4s shown. Generated 2026-05-22 18:17. Metadata comes from cached DVIDS search pages when available; official War.gov hash links are reconstructed from DVIDS titles.</div>
     </div>
   </header>
   <main><div id="grid" class="grid"></div></main>
@@ -94,6 +105,9 @@
     const resultsTop = document.querySelector('main');
     const markerFilter = document.getElementById('markerFilter');
     const metadataToggle = document.getElementById('metadataToggle');
+    const markerIoToggle = document.getElementById('markerIoToggle');
+    const markerIoMenu = document.getElementById('markerIoMenu');
+    const markerImportFile = document.getElementById('markerImportFile');
     const FAVORITES_KEY = 'uapVideoFavorites';
     const DISLIKED_KEY = 'uapVideoDisliked';
     let activeRelease = '';
@@ -124,6 +138,37 @@
       markerFilter.options[2].textContent = `Dislikes (${disliked.size})`;
       markerFilter.options[3].textContent = `Unfaved (${records.length - favorites.size - disliked.size})`;
       markerFilter.value = activeMarkerFilter;
+    }
+    function exportMarkers() {
+      const payload = {
+        uapVideoFavorites: [...favorites].sort(),
+        uapVideoDisliked: [...disliked].sort(),
+        exported_at: new Date().toISOString()
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2) + '\n'], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `uap-video-markers-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+    function mergeMarkers(payload) {
+      const importedFavorites = Array.isArray(payload.uapVideoFavorites) ? payload.uapVideoFavorites : [];
+      const importedDisliked = Array.isArray(payload.uapVideoDisliked) ? payload.uapVideoDisliked : [];
+      importedFavorites.forEach(dodId => {
+        favorites.add(dodId);
+        disliked.delete(dodId);
+      });
+      importedDisliked.forEach(dodId => {
+        if (!favorites.has(dodId)) disliked.add(dodId);
+      });
+      saveFavorites();
+      saveDisliked();
+      updateMarkerFilter();
+      render(false);
     }
     function cycleMarker(dodId) {
       if (!favorites.has(dodId) && !disliked.has(dodId)) {
@@ -292,6 +337,41 @@
       activeMarkerFilter = markerFilter.value;
       render(true);
     });
+    markerIoToggle.addEventListener('click', event => {
+      event.stopPropagation();
+      const isOpen = markerIoMenu.classList.toggle('open');
+      markerIoToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+    document.getElementById('exportMarkers').addEventListener('click', () => {
+      markerIoMenu.classList.remove('open');
+      markerIoToggle.setAttribute('aria-expanded', 'false');
+      exportMarkers();
+    });
+    document.getElementById('importMarkers').addEventListener('click', () => {
+      markerIoMenu.classList.remove('open');
+      markerIoToggle.setAttribute('aria-expanded', 'false');
+      markerImportFile.click();
+    });
+    markerImportFile.addEventListener('change', () => {
+      const file = markerImportFile.files?.[0];
+      markerImportFile.value = '';
+      if (!file) return;
+      const reader = new FileReader();
+      reader.addEventListener('load', () => {
+        try {
+          mergeMarkers(JSON.parse(reader.result));
+        } catch (error) {
+          alert('Could not import marker JSON.');
+          console.error(error);
+        }
+      });
+      reader.readAsText(file);
+    });
+    document.addEventListener('click', event => {
+      if (event.target.closest('.io-wrap')) return;
+      markerIoMenu.classList.remove('open');
+      markerIoToggle.setAttribute('aria-expanded', 'false');
+    });
     grid.addEventListener('click', event => {
       const markerButton = event.target.closest('[data-marker]');
       if (markerButton) {
@@ -347,7 +427,6 @@
       render(true);
     });
     document.getElementById('clear').addEventListener('click', () => { q.value = ''; activeRelease = ''; activeDecade = ''; activeMarkerFilter = ''; render(true); });
-    document.getElementById('collapse').addEventListener('click', () => document.querySelectorAll('video').forEach(v => v.pause()));
     render();
   </script>
 </body>

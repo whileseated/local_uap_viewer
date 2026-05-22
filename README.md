@@ -53,6 +53,7 @@ The page embeds every local MP4 as a playable video card and uses generated thum
 - Video markers are saved in the browser using `localStorage`, keyed by DOD id.
 - The marker cycles from neutral to favorite to thumbs-down to neutral.
 - The marker dropdown filters to Faves, Dislikes, or Unfaved videos and shows counts.
+- Faves import/export saves or imports marker JSON for moving markers between browsers or machines.
 - Release pills show all videos or only one release, with counts.
 - Decade pills filter by `date_taken`, with counts.
 - Sort changes ordering by title, date taken, file size, or DOD id.
@@ -62,6 +63,5 @@ The page embeds every local MP4 as a playable video card and uses generated thum
 - Press Space to play or pause the active video.
 - Typing in search automatically shows metadata and highlights the search term in pale yellow.
 - Clear resets search and filters.
-- Pause all stops every currently loaded video.
 
 When search or filters change, the page scrolls back to the top of the results.
