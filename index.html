@@ -11,7 +11,7 @@
     header { position:sticky; top:0; z-index:2; background:rgba(17,19,20,.94); border-bottom:1px solid var(--line); backdrop-filter: blur(10px); }
     .wrap { max-width:1440px; margin:0 auto; padding:18px; }
     h1 { margin:0 0 12px; font-size:24px; letter-spacing:0; }
-    .controls { display:grid; grid-template-columns:minmax(220px,1fr) auto auto auto; gap:10px; align-items:center; }
+    .controls { display:grid; grid-template-columns:minmax(220px,1fr) auto auto auto auto; gap:10px; align-items:center; }
     input, select, button { min-height:38px; border:1px solid var(--line); border-radius:6px; background:#0d0f10; color:var(--text); padding:0 10px; font:inherit; }
     button { cursor:pointer; }
     .filter-row { display:grid; grid-template-columns:auto 1fr; gap:10px; align-items:start; margin-top:12px; }
@@ -25,10 +25,15 @@
     article { border:1px solid var(--line); border-radius:8px; background:var(--panel); overflow:hidden; }
     video { display:block; width:100%; aspect-ratio:16/9; background:#050606; }
     .body { padding:14px; }
-    .kicker { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; color:var(--muted); font:12px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .kicker { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; color:var(--muted); font:12px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; cursor:pointer; }
+    .kicker:hover, h2.metadata-trigger:hover { color:var(--text); }
     h2 { margin:0; font-size:17px; line-height:1.3; letter-spacing:0; }
+    h2.metadata-trigger { cursor:pointer; }
     p { margin:10px 0 0; color:var(--muted); }
     .description { white-space:pre-line; }
+    .metadata { display:none; }
+    .show-all-metadata .metadata, article.show-row-metadata .metadata, .searching .metadata { display:block; }
+    mark { background:#fff2a8; color:#161616; border-radius:2px; padding:0 .08em; }
     .links { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
     a { color:var(--accent); text-decoration:none; }
     a:hover { text-decoration:underline; }
@@ -52,6 +57,7 @@
           <option value="size_asc">Smallest files first</option>
           <option value="dod">Sort by DOD id</option>
         </select>
+        <button id="metadataToggle" type="button" aria-pressed="false">Show metadata</button>
         <button id="collapse">Pause all</button>
         <button id="clear">Clear</button>
       </div>
@@ -63,7 +69,7 @@
         <div class="filter-label">Decade</div>
         <div id="decades" class="filter-pills" aria-label="View by decade"></div>
       </div>
-      <div class="summary"><span id="shown">85</span> of 85 local MP4s shown. Generated 2026-05-22 14:21. Metadata comes from cached DVIDS search pages when available; official War.gov hash links are reconstructed from DVIDS titles.</div>
+      <div class="summary"><span id="shown">85</span> of 85 local MP4s shown. Generated 2026-05-22 14:32. Metadata comes from cached DVIDS search pages when available; official War.gov hash links are reconstructed from DVIDS titles.</div>
     </div>
   </header>
   <main><div id="grid" class="grid"></div></main>
@@ -77,9 +83,19 @@
     const releases = document.getElementById('releases');
     const decades = document.getElementById('decades');
     const resultsTop = document.querySelector('main');
+    const metadataToggle = document.getElementById('metadataToggle');
     let activeRelease = '';
     let activeDecade = '';
+    let showAllMetadata = false;
     const esc = value => String(value || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    function escapeRegExp(value) {
+      return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+    function marked(value, term) {
+      const safe = esc(value);
+      if (!term) return safe;
+      return safe.replace(new RegExp(escapeRegExp(esc(term)), 'gi'), match => `<mark>${match}</mark>`);
+    }
     function decadeOf(r) {
       const match = String(r.date_taken || '').match(/(\d{4})$/);
       if (!match) return 'Unknown';
@@ -116,7 +132,7 @@
         .concat(keys.map(key => `<button class="filter-pill ${activeRelease === key ? 'active' : ''}" type="button" data-release="${esc(key)}">${esc(counts[key].label)} (${counts[key].count})</button>`))
         .join('');
     }
-    function card(r) {
+    function card(r, term) {
       const hay = [r.title, r.dod_id, r.pr, r.description, r.filename].join(' ');
       const links = [
         r.dvids_url && `<a class="pill" href="${esc(r.dvids_url)}" target="_blank" rel="noreferrer">DVIDS</a>`,
@@ -124,28 +140,30 @@
         r.source_mp4_url && `<a class="pill" href="${esc(r.source_mp4_url)}" target="_blank" rel="noreferrer">Source MP4</a>`
       ].filter(Boolean).join('');
       const facts = [
-        r.date_taken && `Taken ${esc(r.date_taken)}`,
-        r.date_posted && `Posted ${esc(r.date_posted)}`,
-        r.location && `Location ${esc(r.location)}`,
-        r.duration && `Length ${esc(r.duration)}`,
-        r.virin && `VIRIN ${esc(r.virin)}`
-      ].filter(Boolean).map(v => `<span class="pill">${v}</span>`).join('');
+        r.date_taken && `Taken ${r.date_taken}`,
+        r.date_posted && `Posted ${r.date_posted}`,
+        r.location && `Location ${r.location}`,
+        r.duration && `Length ${r.duration}`,
+        r.virin && `VIRIN ${r.virin}`
+      ].filter(Boolean).map(v => `<span class="pill">${marked(v, term)}</span>`).join('');
       return `<article data-hay="${esc(hay.toLowerCase())}">
         <video controls preload="metadata" playsinline poster="${esc(r.poster || '')}">
           <source src="${esc(r.path)}" type="video/mp4">
         </video>
         <div class="body">
-          <div class="kicker">
-            <span>${esc(r.pr || 'No PR')}</span>
-            <span>${esc(r.release_label || 'Unfiled')}</span>
-            <span>${esc(r.dod_id)}</span>
-            <span>${esc(r.size_label)}</span>
+          <div class="kicker" title="Show metadata for this row">
+            <span>${marked(r.pr || 'No PR', term)}</span>
+            <span>${marked(r.release_label || 'Unfiled', term)}</span>
+            <span>${marked(r.dod_id, term)}</span>
+            <span>${marked(r.size_label, term)}</span>
             ${r.dvids_id ? `<span>DVIDS ${esc(r.dvids_id)}</span>` : '<span class="missing">metadata not cached</span>'}
           </div>
-          <h2>${esc(r.title)}</h2>
-          ${facts ? `<div class="links">${facts}</div>` : ''}
-          ${r.description ? `<p class="description">${esc(r.description)}</p>` : ''}
-          <div class="links"><a class="pill" href="${esc(r.path)}">Open local MP4</a>${links}</div>
+          <h2 class="metadata-trigger" title="Show metadata for this row">${marked(r.title, term)}</h2>
+          <div class="metadata">
+            ${facts ? `<div class="links">${facts}</div>` : ''}
+            ${r.description ? `<p class="description">${marked(r.description, term)}</p>` : ''}
+            <div class="links"><a class="pill" href="${esc(r.path)}">Open local MP4</a>${links}</div>
+          </div>
         </div>
       </article>`;
     }
@@ -168,13 +186,30 @@
         return a.title.localeCompare(b.title);
       });
       shown.textContent = list.length;
-      grid.innerHTML = list.map(card).join('');
+      document.body.classList.toggle('searching', Boolean(term));
+      document.body.classList.toggle('show-all-metadata', showAllMetadata);
+      metadataToggle.textContent = showAllMetadata ? 'Hide metadata' : 'Show metadata';
+      metadataToggle.setAttribute('aria-pressed', showAllMetadata ? 'true' : 'false');
+      grid.innerHTML = list.map(r => card(r, term)).join('');
       renderDecades();
       renderReleases();
       if (shouldScroll) scrollToResults();
     }
     q.addEventListener('input', () => render(true));
     sort.addEventListener('change', () => render(true));
+    metadataToggle.addEventListener('click', () => {
+      showAllMetadata = !showAllMetadata;
+      render(false);
+    });
+    grid.addEventListener('click', event => {
+      const trigger = event.target.closest('.kicker, .metadata-trigger');
+      if (!trigger) return;
+      const article = trigger.closest('article');
+      const rowTop = article.offsetTop;
+      const rowArticles = Array.from(grid.querySelectorAll('article')).filter(item => item.offsetTop === rowTop);
+      const shouldShow = !rowArticles.every(item => item.classList.contains('show-row-metadata'));
+      rowArticles.forEach(item => item.classList.toggle('show-row-metadata', shouldShow));
+    });
     decades.addEventListener('click', event => {
       const button = event.target.closest('[data-decade]');
       if (!button) return;

@@ -7,6 +7,8 @@ Clone the repo, download each release into folders (release_01 or release_02) de
 Release 1: https://d34w7g4gy10iej.cloudfront.net/uapvideos.zip  
 Release 2: https://d34w7g4gy10iej.cloudfront.net/uap052226.zip  
 
+![Local UAP Video Index screenshot](img/Xnapper-2026-05-22-14.33.36.png)
+
 ## Folder Structure
 
 Keep videos in release-specific folders:
@@ -140,6 +142,9 @@ Controls:
 - Release pills show all videos or only one release, with counts.
 - Decade pills filter by `date_taken`, with counts.
 - Sort changes ordering by title, file size, or DOD id.
+- Show metadata toggles all metadata on or off.
+- Clicking a card's top metadata strip shows metadata for every card in that grid row.
+- Typing in search automatically shows metadata and highlights the search term in pale yellow.
 - Clear resets search and filters.
 - Pause all stops every currently loaded video.
 
